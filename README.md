@@ -1,24 +1,127 @@
-# PrintCost V2
+# 3DPRICE
 
-A two-part 3D printing quotation system:
+> **From 3D model to a real print quote.**
 
-1. **Frontend** — React/Vite, deployable on GitHub Pages.
-2. **Slicer API** — FastAPI + CuraEngine, hosted on a server/container.
+3DPRICE is a modern 3D-printing quotation engine that turns STL, OBJ, and 3MF models into practical printing estimates using real slicing data.
 
-V2 adds real slicer integration, automatic support generation through CuraEngine settings, selectable layer height, and a customer quote/order modal.
+**Upload → Configure → Slice → Calculate → Quote**
 
-## Why a backend is required
+## Features
 
-GitHub Pages is static hosting. A real slicer such as CuraEngine is a native C++ application that needs server-side execution. CuraEngine's official project describes it as a C++ console application for converting 3D models into printer G-code. It can be used separately or integrated into another application.
+- STL / OBJ / 3MF upload
+- Interactive 3D model workspace
+- Three.js rendering with orbit / zoom / pan
+- Build-volume visualization
+- Model dimensions
+- CuraEngine slicing through FastAPI
+- Sliced print-time and filament-usage calculation
+- Layer height, infill, walls, supports and support-angle controls
+- PLA / PETG / ABS / TPU
+- Material, machine, labor, delivery and markup pricing
+- Professional quote flow
+- GitHub Pages-ready frontend
+- Docker-ready slicer backend
 
-Official references:
-- https://github.com/Ultimaker/CuraEngine
-- https://github.com/Ultimaker/CuraEngine/wiki/Slicing
+## Architecture
 
-PrusaSlicer is another valid backend option and exposes a command-line interface for slicing. It also supports loading profiles from 3MF/AMF and overriding settings on the command line.
+```text
+GitHub Pages
+   │
+   ▼
+React + TypeScript + Vite + Three.js
+   │
+   │ POST /api/slice
+   ▼
+FastAPI
+   │
+   ▼
+CuraEngine
+   │
+   ▼
+G-code analysis
+   │
+   ▼
+Material + time + machine cost
+   │
+   ▼
+Customer quote
+```
 
-## Important
+## Product vision
 
-The supplied V2 code is an integration-ready production architecture, but you still need to install a compatible CuraEngine binary and a printer profile on the backend host. The exact profile should be selected for your actual printer/nozzle/filament.
+**Model → Preview → Configure → Slice → Price → Quote → Pay → Print → Deliver**
 
-For public deployment, isolate the slicer and add upload limits, authentication/rate limiting, file validation, cleanup, and persistent order storage.
+The browser handles visualization and interaction. CuraEngine remains the authoritative source for sliced print time and material consumption.
+
+## Roadmap
+
+### 3D workspace
+- [x] Interactive Three.js viewer
+- [x] Orbit / zoom / pan
+- [x] Automatic model centering
+- [x] Build-volume visualization
+- [x] Model dimensions
+- [x] Grid and studio lighting
+- [x] Solid / wireframe presentation
+- [ ] Slice/layer visualization
+
+### Printer profiles
+- [ ] Multiple printer profiles
+- [ ] Build volume
+- [ ] Nozzle
+- [ ] Filament diameter
+- [ ] Printer-specific speeds and temperatures
+- [ ] Printer-specific Cura settings
+
+### Business platform
+- [ ] Customer records
+- [ ] Quote history
+- [ ] Orders
+- [ ] PostgreSQL
+- [ ] PDF quotations
+- [ ] Payment gateway
+- [ ] Admin dashboard
+- [ ] Production queue
+
+## Local development
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend uses `VITE_API_URL` for the slicer API. Default:
+
+```text
+http://localhost:8000
+```
+
+Backend:
+
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+CuraEngine must be available in `PATH`, or configured with `CURA_ENGINE`.
+
+## Pricing
+
+```text
+material
++ machine
++ labor
++ delivery
+↓
+base cost
+↓
+markup
+↓
+customer price
+```
+
+## License
+
+License information will be added before the production release.
