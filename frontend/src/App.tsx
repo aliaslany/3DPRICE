@@ -6,278 +6,45 @@ import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+type Metrics={weight_g:number;print_time_sec:number;material_cost:number;machine_cost:number;total:number;layers?:number};
+const money=(v:number)=>new Intl.NumberFormat("en-US",{maximumFractionDigits:0}).format(v);
+const time=(s:number)=>!s?"—":`${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
 
-type Metrics = {
-  weight_g: number;
-  print_time_sec: number;
-  material_cost: number;
-  machine_cost: number;
-  total: number;
-  layers?: number;
-};
-
-function formatTime(sec: number) {
-  if (!sec) return "—";
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  return h ? `${h}h ${m}m` : `${m}m`;
+function Viewer({file,wireframe,onDimensions}:{file:File|null;wireframe:boolean;onDimensions:(v:{x:number;y:number;z:number})=>void}){
+ const mount=useRef<HTMLDivElement>(null);
+ useEffect(()=>{const host=mount.current;if(!host)return;const scene=new THREE.Scene();scene.background=new THREE.Color("#08090d");
+  const camera=new THREE.PerspectiveCamera(42,host.clientWidth/host.clientHeight,.01,10000);camera.position.set(180,150,220);
+  const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(host.clientWidth,host.clientHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;host.appendChild(renderer.domElement);
+  const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.07;
+  scene.add(new THREE.HemisphereLight(0xe9e6ff,0x14151c,2.1));const key=new THREE.DirectionalLight(0xffffff,2.5);key.position.set(120,220,160);scene.add(key);const rim=new THREE.PointLight(0x9b8cff,18,700);rim.position.set(-180,120,-120);scene.add(rim);
+  const grid=new THREE.GridHelper(420,42,0x383943,0x1b1d24);grid.position.y=-1;scene.add(grid);let object:THREE.Object3D|null=null;let frame=0;
+  const dispose=()=>object?.traverse((n:any)=>{n.geometry?.dispose?.();Array.isArray(n.material)?n.material.forEach((m:any)=>m.dispose?.()):n.material?.dispose?.()});
+  const fit=(o:THREE.Object3D)=>{const b=new THREE.Box3().setFromObject(o),s=b.getSize(new THREE.Vector3()),c=b.getCenter(new THREE.Vector3());o.position.sub(c);const max=Math.max(s.x,s.y,s.z),d=max/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)))*1.55;camera.position.set(d,d*.7,d);camera.near=Math.max(max/1000,.01);camera.far=Math.max(max*20,1000);camera.updateProjectionMatrix();controls.target.set(0,0,0);controls.update();onDimensions({x:s.x,y:s.y,z:s.z});};
+  const mat=()=>new THREE.MeshStandardMaterial({color:0xb0a5ff,roughness:.28,metalness:.08,wireframe});
+  const load=async()=>{if(!file)return;const url=URL.createObjectURL(file);try{let o:THREE.Object3D;if(file.name.toLowerCase().endsWith(".stl")){const g=await new STLLoader().loadAsync(url);g.computeVertexNormals();o=new THREE.Mesh(g,mat())}else if(file.name.toLowerCase().endsWith(".obj")){o=await new OBJLoader().loadAsync(url);o.traverse((n:any)=>{if(n.isMesh)n.material=mat()})}else{o=await new ThreeMFLoader().loadAsync(url);o.traverse((n:any)=>{if(n.isMesh)n.material=mat()})}object=o;scene.add(o);fit(o)}catch(e){console.error(e)}finally{URL.revokeObjectURL(url)}};load();
+  const resize=()=>{if(!host.clientWidth||!host.clientHeight)return;camera.aspect=host.clientWidth/host.clientHeight;camera.updateProjectionMatrix();renderer.setSize(host.clientWidth,host.clientHeight)};const ro=new ResizeObserver(resize);ro.observe(host);
+  const animate=()=>{controls.update();renderer.render(scene,camera);frame=requestAnimationFrame(animate)};animate();return()=>{cancelAnimationFrame(frame);ro.disconnect();controls.dispose();dispose();renderer.dispose();host.removeChild(renderer.domElement)}}
+ ,[file,wireframe,onDimensions]);return <div ref={mount} className="viewer-canvas"/>;
 }
 
-function money(v: number) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(v);
-}
-
-function Viewer({ file, wireframe, onMetrics }: {
-  file: File | null; wireframe: boolean; onMetrics: (m: {x:number,y:number,z:number}) => void;
-}) {
-  const mount = useRef<HTMLDivElement>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!mount.current) return;
-    const host = mount.current;
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#08090d");
-
-    const camera = new THREE.PerspectiveCamera(42, host.clientWidth / host.clientHeight, 0.1, 10000);
-    camera.position.set(180, 150, 220);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    renderer.setSize(host.clientWidth, host.clientHeight);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    host.appendChild(renderer.domElement);
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.07;
-
-    scene.add(new THREE.HemisphereLight(0xdfe7ff, 0x171923, 2.1));
-    const key = new THREE.DirectionalLight(0xffffff, 2.5);
-    key.position.set(120, 220, 160);
-    scene.add(key);
-    const rim = new THREE.PointLight(0x9b8cff, 20, 700);
-    rim.position.set(-180, 120, -120);
-    scene.add(rim);
-
-    const grid = new THREE.GridHelper(400, 40, 0x353946, 0x1b1d25);
-    grid.position.y = -1;
-    scene.add(grid);
-
-    let object: THREE.Object3D | null = null;
-    let frame: number;
-
-    const dispose = () => {
-      if (!object) return;
-      object.traverse((node: any) => {
-        node.geometry?.dispose?.();
-        if (Array.isArray(node.material)) node.material.forEach((m:any) => m.dispose?.());
-        else node.material?.dispose?.();
-      });
-    };
-
-    const fit = (obj: THREE.Object3D) => {
-      const box = new THREE.Box3().setFromObject(obj);
-      const size = box.getSize(new THREE.Vector3());
-      const center = box.getCenter(new THREE.Vector3());
-      obj.position.sub(center);
-      const max = Math.max(size.x, size.y, size.z);
-      const distance = max / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) * 1.55;
-      camera.position.set(distance, distance * .7, distance);
-      camera.near = Math.max(max / 1000, .01);
-      camera.far = Math.max(max * 20, 1000);
-      camera.updateProjectionMatrix();
-      controls.target.set(0, 0, 0);
-      controls.update();
-      onMetrics({ x:size.x, y:size.y, z:size.z });
-    };
-
-    const material = new THREE.MeshStandardMaterial({
-      color: 0xaaa0ff,
-      roughness: .28,
-      metalness: .08,
-      wireframe
-    });
-
-    const load = async () => {
-      if (!file) return;
-      setLoading(true);
-      dispose();
-      const url = URL.createObjectURL(file);
-      try {
-        let obj: THREE.Object3D;
-        if (file.name.toLowerCase().endsWith(".stl")) {
-          const geometry = await new STLLoader().loadAsync(url);
-          geometry.computeVertexNormals();
-          obj = new THREE.Mesh(geometry, material.clone());
-        } else if (file.name.toLowerCase().endsWith(".obj")) {
-          obj = await new OBJLoader().loadAsync(url);
-          obj.traverse((n:any) => { if (n.isMesh) n.material = material.clone(); });
-        } else {
-          obj = await new ThreeMFLoader().loadAsync(url);
-          obj.traverse((n:any) => { if (n.isMesh) n.material = material.clone(); });
-        }
-        object = obj;
-        scene.add(obj);
-        fit(obj);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        URL.revokeObjectURL(url);
-        setLoading(false);
-      }
-    };
-    load();
-
-    const resize = () => {
-      if (!host.clientWidth || !host.clientHeight) return;
-      camera.aspect = host.clientWidth / host.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(host.clientWidth, host.clientHeight);
-    };
-    const observer = new ResizeObserver(resize);
-    observer.observe(host);
-
-    const animate = () => {
-      controls.update();
-      renderer.render(scene, camera);
-      frame = requestAnimationFrame(animate);
-    };
-    animate();
-
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      controls.dispose();
-      dispose();
-      renderer.dispose();
-      host.removeChild(renderer.domElement);
-    };
-  }, [file, wireframe, onMetrics]);
-
-  return <div className="viewer">
-    <div ref={mount} className="canvas"/>
-    {!file && <div className="empty-view">
-      <div className="model-glyph">◇</div>
-      <strong>Drop a 3D model here</strong>
-      <span>STL · OBJ · 3MF</span>
-    </div>}
-    {loading && <div className="viewer-loading">Loading geometry…</div>}
-    {file && <div className="viewer-hud">
-      <span>3D WORKSPACE</span>
-      <span>ORBIT · ZOOM · PAN</span>
-    </div>}
-  </div>;
-}
-
-export default function App() {
-  const [file, setFile] = useState<File|null>(null);
-  const [wireframe, setWireframe] = useState(false);
-  const [dims, setDims] = useState({x:0,y:0,z:0});
-  const [drag, setDrag] = useState(false);
-  const [material, setMaterial] = useState("PLA");
-  const [layer, setLayer] = useState(.2);
-  const [infill, setInfill] = useState(20);
-  const [walls, setWalls] = useState(3);
-  const [supports, setSupports] = useState(true);
-  const [markup, setMarkup] = useState(20);
-  const [machine, setMachine] = useState(65000);
-  const [filament, setFilament] = useState(900000);
-  const [labor, setLabor] = useState(150000);
-  const [result, setResult] = useState<Metrics|null>(null);
-  const [busy, setBusy] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
-
-  const choose = (f: File) => {
-    if (/\.(stl|obj|3mf)$/i.test(f.name)) setFile(f);
-  };
-
-  const slice = async () => {
-    if (!file) return;
-    setBusy(true);
-    const form = new FormData();
-    form.append("file", file);
-    form.append("material", material);
-    form.append("layerHeight", String(layer));
-    form.append("infill", String(infill));
-    form.append("walls", String(walls));
-    form.append("supports", String(supports));
-    form.append("markup", String(markup));
-    form.append("machinePerHour", String(machine));
-    form.append("filamentPerKg", String(filament));
-    form.append("labor", String(labor));
-    try {
-      const r = await fetch(`${API}/api/slice`, { method:"POST", body:form });
-      if (!r.ok) throw new Error(await r.text());
-      setResult(await r.json());
-    } catch {
-      setResult(null);
-      alert("The slicer API is not reachable. Start the FastAPI/CuraEngine backend or configure VITE_API_URL.");
-    } finally { setBusy(false); }
-  };
-
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault(); setDrag(false);
-    const f = e.dataTransfer.files[0]; if (f) choose(f);
-  };
-
-  return <main>
-    <header className="topbar">
-      <div className="brand"><span>PC</span><strong>PrintCost</strong></div>
-      <div className="status"><i/> CURA ENGINE <b>READY</b></div>
-    </header>
-
-    <section className="hero">
-      <div>
-        <div className="eyebrow">3D PRINT QUOTATION ENGINE</div>
-        <h1>From model<br/><em>to a real quote.</em></h1>
-        <p>Inspect your model, configure the print, slice it, and turn the result into a transparent production price.</p>
-      </div>
-      <div className="steps"><span className="active">01 MODEL</span><span>02 SLICE</span><span>03 QUOTE</span></div>
-    </section>
-
-    <section className="workspace">
-      <div className="stage-wrap" onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={onDrop}>
-        <Viewer file={file} wireframe={wireframe} onMetrics={setDims}/>
-        {drag && <div className="drop-overlay">DROP MODEL TO LOAD</div>}
-        <div className="stage-actions">
-          <button onClick={()=>input.current?.click()}>{file ? "CHANGE MODEL" : "UPLOAD MODEL"}</button>
-          <button onClick={()=>setWireframe(!wireframe)}>{wireframe ? "SOLID" : "WIREFRAME"}</button>
-          <input ref={input} hidden type="file" accept=".stl,.obj,.3mf" onChange={e=>e.target.files?.[0]&&choose(e.target.files[0])}/>
-        </div>
-        {file && <div className="model-info">
-          <strong>{file.name}</strong>
-          <span>{dims.x.toFixed(1)} × {dims.y.toFixed(1)} × {dims.z.toFixed(1)} mm</span>
-        </div>}
-      </div>
-
-      <aside className="panel">
-        <div className="panel-head"><span>PRINT SETTINGS</span><small>FDM</small></div>
-        <label>Material<select value={material} onChange={e=>setMaterial(e.target.value)}><option>PLA</option><option>PETG</option><option>ABS</option><option>TPU</option></select></label>
-        <label>Layer height <output>{layer.toFixed(2)} mm</output><input type="range" min=".08" max=".28" step=".01" value={layer} onChange={e=>setLayer(+e.target.value)}/></label>
-        <label>Infill <output>{infill}%</output><input type="range" min="0" max="100" step="5" value={infill} onChange={e=>setInfill(+e.target.value)}/></label>
-        <label>Walls <output>{walls}</output><input type="range" min="1" max="8" value={walls} onChange={e=>setWalls(+e.target.value)}/></label>
-        <div className="toggle"><span>Automatic supports</span><button className={supports?"on":""} onClick={()=>setSupports(!supports)}><i/></button></div>
-        <div className="divider"/>
-        <div className="panel-head"><span>COST MODEL</span><small>LOCAL</small></div>
-        <label>Filament / kg<input type="number" value={filament} onChange={e=>setFilament(+e.target.value)}/></label>
-        <label>Machine / hour<input type="number" value={machine} onChange={e=>setMachine(+e.target.value)}/></label>
-        <label>Labor<input type="number" value={labor} onChange={e=>setLabor(+e.target.value)}/></label>
-        <label>Profit markup <output>{markup}%</output><input type="range" min="0" max="100" value={markup} onChange={e=>setMarkup(+e.target.value)}/></label>
-        <button className="slice" disabled={!file||busy} onClick={slice}>{busy ? "SLICING MODEL…" : "SLICE & CALCULATE →"}</button>
-      </aside>
-    </section>
-
-    <section className="metrics">
-      <div><small>DIMENSIONS</small><strong>{dims.x ? `${dims.x.toFixed(1)} × ${dims.y.toFixed(1)} × ${dims.z.toFixed(1)}` : "—"}</strong><span>millimeters</span></div>
-      <div><small>PRINT TIME</small><strong>{result ? formatTime(result.print_time_sec) : "—"}</strong><span>from G-code</span></div>
-      <div><small>MATERIAL</small><strong>{result ? `${result.weight_g.toFixed(1)} g` : "—"}</strong><span>actual sliced usage</span></div>
-      <div><small>LAYERS</small><strong>{result?.layers || "—"}</strong><span>sliced layers</span></div>
-    </section>
-
-    <section className="quote">
-      <div><small>ESTIMATED CUSTOMER PRICE</small><strong>{result ? `${money(result.total)} تومان` : "Awaiting slice"}</strong><span>Transparent calculation · material + machine + labor + markup</span></div>
-      {result && <div className="quote-details"><span>Material <b>{money(result.material_cost)}</b></span><span>Machine <b>{money(result.machine_cost)}</b></span></div>}
-    </section>
-  </main>
+export default function App(){
+ const [file,setFile]=useState<File|null>(null),[wire,setWire]=useState(false),[dims,setDims]=useState({x:0,y:0,z:0}),[drag,setDrag]=useState(false);const [material,setMaterial]=useState("PLA"),[layer,setLayer]=useState(.2),[infill,setInfill]=useState(20),[walls,setWalls]=useState(3),[supports,setSupports]=useState(true),[markup,setMarkup]=useState(20);const [filament,setFilament]=useState(900000),[machine,setMachine]=useState(65000),[labor,setLabor]=useState(150000),[result,setResult]=useState<Metrics|null>(null),[busy,setBusy]=useState(false);const input=useRef<HTMLInputElement>(null);const quote=useRef<HTMLElement>(null);
+ const choose=(f:File)=>{if(/\.(stl|obj|3mf)$/i.test(f.name))setFile(f)};const scroll=()=>quote.current?.scrollIntoView({behavior:"smooth"});
+ const slice=async()=>{if(!file)return;setBusy(true);const form=new FormData();form.append("file",file);form.append("material",material);form.append("layerHeight",String(layer));form.append("infill",String(infill));form.append("walls",String(walls));form.append("supports",String(supports));form.append("markup",String(markup));form.append("machinePerHour",String(machine));form.append("filamentPerKg",String(filament));form.append("labor",String(labor));try{const r=await fetch(`${API}/api/slice`,{method:"POST",body:form});if(!r.ok)throw Error(await r.text());setResult(await r.json());scroll()}catch{alert("The slicer API is not reachable. Start FastAPI/CuraEngine or configure VITE_API_URL.")}finally{setBusy(false)}};
+ return <div className="site">
+  <header className="nav"><a className="brand" href="#top"><span>PC</span><b>PrintCost</b></a><nav><a href="#workspace">Calculator</a><a href="#process">How it works</a><a href="#business">For print businesses</a></nav><button className="nav-cta" onClick={scroll}>Get a quote <span>↗</span></button></header>
+  <section className="hero" id="top"><div className="hero-copy"><div className="eyebrow"><i/> 3D PRINT QUOTATION ENGINE</div><h1>Price every print<br/><em>with confidence.</em></h1><p>Upload a model, tune the print, and turn real slicing data into a clear production quote. No spreadsheets. No guessing.</p><div className="hero-actions"><button className="primary" onClick={scroll}>Calculate a print <span>→</span></button><a href="#process">See how it works ↓</a></div><div className="formats"><span>STL</span><span>OBJ</span><span>3MF</span><b/> Real G-code based estimates</div></div><div className="hero-art"><div className="orbit o1"/><div className="orbit o2"/><div className="hero-cube">◇</div><div className="art-label"><small>LIVE WORKFLOW</small><b>MODEL → SLICE → PRICE</b></div></div></section>
+  <section className="trustbar"><span>01 / UPLOAD</span><span>02 / CONFIGURE</span><span>03 / SLICE</span><span>04 / QUOTE</span><small>Designed for makers, studios & print services</small></section>
+  <section className="workspace-section" id="workspace" ref={quote}><div className="section-head"><div><div className="eyebrow">01 / QUOTATION WORKSPACE</div><h2>Your model.<br/><em>Your numbers.</em></h2></div><p>The calculator stays at the center of the product. Everything else exists to make a quote faster and easier to trust.</p></div>
+   <div className="workspace"><div className="stage" onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);const f=e.dataTransfer.files[0];if(f)choose(f)}}><Viewer file={file} wireframe={wire} onDimensions={setDims}/>{!file&&<div className="empty"><div>◇</div><strong>Drop your model here</strong><span>or choose a STL, OBJ or 3MF file</span><button onClick={()=>input.current?.click()}>Choose 3D file</button></div>}{drag&&<div className="drop">DROP MODEL</div>}<input ref={input} hidden type="file" accept=".stl,.obj,.3mf" onChange={e=>e.target.files?.[0]&&choose(e.target.files[0])}/>{file&&<div className="model-chip"><b>{file.name}</b><span>{dims.x.toFixed(1)} × {dims.y.toFixed(1)} × {dims.z.toFixed(1)} mm</span></div>}<div className="stage-tools"><button onClick={()=>input.current?.click()}>{file?"CHANGE MODEL":"UPLOAD MODEL"}</button><button onClick={()=>setWire(!wire)}>{wire?"SOLID":"WIREFRAME"}</button></div></div>
+    <aside className="controls"><div className="panel-title"><b>PRINT SETTINGS</b><small>FDM</small></div><label>Material<select value={material} onChange={e=>setMaterial(e.target.value)}><option>PLA</option><option>PETG</option><option>ABS</option><option>TPU</option></select></label><label>Layer height <output>{layer.toFixed(2)} mm</output><input type="range" min=".08" max=".28" step=".01" value={layer} onChange={e=>setLayer(+e.target.value)}/></label><label>Infill <output>{infill}%</output><input type="range" min="0" max="100" step="5" value={infill} onChange={e=>setInfill(+e.target.value)}/></label><label>Walls <output>{walls}</output><input type="range" min="1" max="8" value={walls} onChange={e=>setWalls(+e.target.value)}/></label><div className="toggle"><span>Automatic supports</span><button className={supports?"on":""} onClick={()=>setSupports(!supports)}><i/></button></div><div className="rule"/><div className="panel-title"><b>COST MODEL</b><small>LOCAL</small></div><label>Filament / kg<input type="number" value={filament} onChange={e=>setFilament(+e.target.value)}/></label><label>Machine / hour<input type="number" value={machine} onChange={e=>setMachine(+e.target.value)}/></label><label>Labor<input type="number" value={labor} onChange={e=>setLabor(+e.target.value)}/></label><label>Profit markup <output>{markup}%</output><input type="range" min="0" max="100" value={markup} onChange={e=>setMarkup(+e.target.value)}/></label><button className="slice" disabled={!file||busy} onClick={slice}>{busy?"SLICING MODEL…":"SLICE & CALCULATE →"}</button></aside>
+   </div>
+   <div className="metrics"><div><small>PRINT TIME</small><strong>{result?time(result.print_time_sec):"—"}</strong><span>from sliced G-code</span></div><div><small>MATERIAL</small><strong>{result?`${result.weight_g.toFixed(1)} g`:"—"}</strong><span>actual filament usage</span></div><div><small>LAYERS</small><strong>{result?.layers||"—"}</strong><span>sliced layers</span></div><div className="price"><small>CUSTOMER PRICE</small><strong>{result?`${money(result.total)} تومان`:"Ready to calculate"}</strong><span>material + machine + labor + markup</span></div></div>
+  </section>
+  <section className="process" id="process"><div className="eyebrow">02 / THE PRODUCT</div><h2>A quote should feel<br/><em>as clear as the print.</em></h2><div className="cards"><article><span>01</span><h3>See the geometry</h3><p>Inspect the actual model in a responsive 3D workspace before you price it.</p></article><article><span>02</span><h3>Slice for reality</h3><p>CuraEngine supplies the print duration and filament consumption instead of rough guesses.</p></article><article><span>03</span><h3>Explain the price</h3><p>Material, machine, labor and markup stay visible so every quote has a reason.</p></article></div></section>
+  <section className="business" id="business"><div><div className="eyebrow">03 / FOR PRINT BUSINESSES</div><h2>From calculator<br/>to <em>production tool.</em></h2><p>3DPRICE is being shaped into a complete quotation workflow for makers and small print services: repeatable pricing first, then customers, orders and production.</p><button className="link-btn" onClick={scroll}>Start a calculation →</button></div><div className="flow"><div><b>MODEL</b><span>STL · OBJ · 3MF</span></div><div><b>CONFIGURE</b><span>Quality · material · supports</span></div><div><b>SLICE</b><span>Time · grams · layers</span></div><div><b>QUOTE</b><span>Cost · margin · price</span></div></div></section>
+  <section className="future"><div className="eyebrow">04 / NEXT</div><h2>The foundation is ready.<br/><em>The business layer comes next.</em></h2><div className="future-grid"><span>QUOTE HISTORY</span><span>PDF QUOTES</span><span>ORDERS</span><span>PAYMENTS</span><span>PRODUCTION QUEUE</span><span>ADMIN DASHBOARD</span></div></section>
+  <section className="cta"><div className="eyebrow">READY WHEN YOU ARE</div><h2>Upload a model.<br/><em>Get a number.</em></h2><button onClick={scroll}>Calculate my print →</button></section>
+  <footer><div className="brand"><span>PC</span><b>PrintCost</b></div><p>3D printing quotation engine.</p><div><a href="#workspace">Calculator</a><a href="#process">How it works</a><a href="#business">Business</a></div></footer>
+ </div>;
 }
