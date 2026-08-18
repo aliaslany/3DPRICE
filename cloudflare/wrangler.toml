@@ -1,0 +1,12 @@
+name = "3dprice"
+main = "./worker.ts"
+compatibility_date = "2026-08-18"
+
+[assets]
+directory = "../frontend/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[vars]
+# Replace this with your real FastAPI/CuraEngine origin before production deploy.
+BACKEND_ORIGIN = "https://api.example.com"
