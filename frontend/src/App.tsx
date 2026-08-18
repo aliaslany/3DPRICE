@@ -5,7 +5,8 @@ import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+// Empty means same-origin `/api`, which is the production path behind the Cloudflare Worker.
+const API = import.meta.env.VITE_API_URL || "";
 type Metrics={weight_g:number;print_time_sec:number;material_cost:number;machine_cost:number;total:number;layers?:number};
 const money=(v:number)=>new Intl.NumberFormat("en-US",{maximumFractionDigits:0}).format(v);
 const time=(s:number)=>!s?"—":`${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
